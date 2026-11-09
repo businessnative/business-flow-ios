@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ScrollView, Share, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { displayName, exportText, formatTime, speakerCount } from '@/calls/core';
+import { callCanRetry, callCopyText, displayName, formatTime, speakerCount } from '@/calls/core';
 import { cancel, removeCall, renameSpeaker, retry, useCalls } from '@/calls/store';
 import { Button, Card, Input, Label, Pill } from '@/ui/components';
 import { C, S, T } from '@/ui/theme';
@@ -24,6 +24,9 @@ export default function CallDetail() {
   if (!n) return <SafeAreaView style={{ flex: 1, backgroundColor: C.base }} />;
   const speakers = [...new Set(n.segments.map((s) => s.speaker))];
   const s = n.summary;
+  const problem = n.status === 'error' || n.status === 'interrupted' || n.status === 'empty';
+  const copyText = callCopyText(n);
+  const retryable = callCanRetry(n);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.base }}>
       <ScrollView contentContainerStyle={{ padding: S.x5, paddingBottom: 60 }}>
@@ -37,10 +40,10 @@ export default function CallDetail() {
             <Text style={T.body}>Feldolgozás… (átírás, beszélők, összefoglaló). Hosszabb hívásnál pár perc is lehet.</Text>
             <View style={{ marginTop: S.x3 }}><Button kind="secondary" title="Megszakítás" onPress={() => cancel(n.id)} /></View>
           </Card>
-        ) : n.status === 'error' ? (
-          <Card style={{ marginTop: S.x4, borderColor: C.error }}>
-            <Text style={[T.body, { color: C.error }]}>{n.error}</Text>
-            <View style={{ marginTop: S.x3 }}><Button title="Újra" icon="refresh" onPress={() => void retry(n.id)} /></View>
+        ) : problem ? (
+          <Card style={{ marginTop: S.x4, borderColor: n.status === 'error' ? C.error : C.warning }}>
+            <Text style={[T.body, { color: n.status === 'error' ? C.error : C.warning }]}>{n.error}</Text>
+            {retryable ? <View style={{ marginTop: S.x3 }}><Button title="Újra" icon="refresh" onPress={() => void retry(n.id)} /></View> : null}
           </Card>
         ) : null}
         {s ? (
@@ -54,10 +57,10 @@ export default function CallDetail() {
             <List title="Fontos adatok" items={s.keyFacts} />
           </Card>
         ) : null}
-        {n.status === 'done' ? (
+        {copyText ? (
           <View style={{ flexDirection: 'row', gap: S.x3, marginTop: S.x4 }}>
-            <View style={{ flex: 1 }}><Button title="Másolás" icon="copy" onPress={() => void Clipboard.setStringAsync(exportText(n))} /></View>
-            <View style={{ flex: 1 }}><Button kind="secondary" title="Megosztás" onPress={() => void Share.share({ message: exportText(n) })} /></View>
+            <View style={{ flex: 1 }}><Button title="Másolás" icon="copy" onPress={() => void Clipboard.setStringAsync(copyText)} /></View>
+            <View style={{ flex: 1 }}><Button kind="secondary" title="Megosztás" onPress={() => void Share.share({ message: copyText })} /></View>
           </View>
         ) : null}
         {speakerCount(n.segments) > 1 ? (

@@ -5,10 +5,11 @@ import { useSyncExternalStore } from 'react';
 
 import FlowSession from '../../modules/flow-session';
 import { newId } from '@/engine/types';
+import { redactSecrets } from '@/history/recovery';
 import { OpenAIError, errorMessage } from '@/services/openai';
 import { getState } from '@/state/store';
 import { readAllKeys } from '@/state/keychain';
-import type { CallNote, CallSource } from './core';
+import type { CallNote, CallSource, CallStatus, CallSummary } from './core';
 import { processAudio, processTranscript, type CallDeps } from './pipeline';
 
 const KEY = 'bf.calls.v1';
@@ -29,8 +30,10 @@ export async function loadCalls() {
   try {
     const raw = await AsyncStorage.getItem(KEY);
     const list: CallNote[] = raw ? JSON.parse(raw) : [];
-    // An app kill mid-processing leaves "processing" items: turn them into retryable errors.
-    calls = list.map((c) => (c.status === 'processing' ? { ...c, status: 'error', error: 'A feldolgozás megszakadt. Koppints az Újra gombra.' } : c));
+    // An app kill mid-processing leaves "processing" items: turn them into retryable, on-device rows.
+    const interrupted = list.some((c) => c.status === 'processing');
+    calls = list.map((c) => scrub(c.status === 'processing' ? { ...c, status: 'interrupted', error: 'A feldolgozás megszakadt. Koppints az Újra gombra.' } : c));
+    if (interrupted) persist();
   } catch {
     calls = [];
   }
@@ -40,8 +43,9 @@ export async function loadCalls() {
 
 const persist = () => AsyncStorage.setItem(KEY, JSON.stringify(calls.slice(0, MAX))).catch(() => {});
 function put(n: CallNote) {
-  const i = calls.findIndex((c) => c.id === n.id);
-  calls = i >= 0 ? calls.map((c) => (c.id === n.id ? n : c)) : [n, ...calls];
+  const clean = scrub(n);
+  const i = calls.findIndex((c) => c.id === clean.id);
+  calls = i >= 0 ? calls.map((c) => (c.id === clean.id ? clean : c)) : [clean, ...calls];
   persist();
   emit();
 }
@@ -51,8 +55,49 @@ const patch = (id: string, p: Partial<CallNote>) => {
 };
 
 function friendly(e: unknown): string {
-  if (e instanceof OpenAIError) return e.kind === 'tooLarge' && e.message && e.message !== 'tooLarge' ? e.message : errorMessage(e.kind, e.provider);
-  return 'Ismeretlen hiba a feldolgozás közben.';
+  const msg = e instanceof OpenAIError
+    ? e.kind === 'emptyResult'
+      ? 'Nem hallottunk beszédet a felvételen.'
+      : e.kind === 'cancelled'
+        ? 'A feldolgozás megszakadt. Koppints az Újra gombra.'
+        : e.kind === 'tooLarge' && e.message && e.message !== 'tooLarge'
+          ? e.message
+          : errorMessage(e.kind, e.provider)
+    : 'Ismeretlen hiba a feldolgozás közben.';
+  return redactSecrets(msg);
+}
+
+function callStatusOf(e: unknown): CallStatus {
+  if (e instanceof OpenAIError && e.kind === 'emptyResult') return 'empty';
+  if (e instanceof OpenAIError && e.kind === 'cancelled') return 'interrupted';
+  return 'error';
+}
+
+function scrubText(s: string): string {
+  return redactSecrets(s);
+}
+
+function scrubSummary(s: CallSummary): CallSummary {
+  return {
+    title: scrubText(s.title),
+    summary: scrubText(s.summary),
+    decisions: s.decisions.map(scrubText),
+    todos: s.todos.map(scrubText),
+    followUps: s.followUps.map(scrubText),
+    keyFacts: s.keyFacts.map(scrubText),
+  };
+}
+
+/** History and call notes never keep an API key, even if one was spoken or echoed by a provider. */
+function scrub(n: CallNote): CallNote {
+  return {
+    ...n,
+    error: n.error ? scrubText(n.error) : undefined,
+    transcript: scrubText(n.transcript ?? ''),
+    fileName: n.fileName ? scrubText(n.fileName) : undefined,
+    segments: n.segments.map((seg) => ({ ...seg, speaker: scrubText(seg.speaker), text: scrubText(seg.text) })),
+    summary: n.summary ? scrubSummary(n.summary) : null,
+  };
 }
 
 const deps = (signal: AbortSignal): CallDeps => ({ readBase64: (u) => new FsFile(u).base64(), signal });
@@ -66,12 +111,16 @@ async function run(id: string) {
   try {
     const { keys } = await readAllKeys();
     const s = getState().settings;
-    const out = n.audioUri
-      ? await processAudio(s, keys, { uri: n.audioUri, name: n.fileName ?? 'hivas.m4a', size: fileSize(n.audioUri) }, deps(abort.signal))
+    const audio = n.audioUri;
+    const out = audio
+      ? await processAudio(s, keys, { uri: audio, name: n.fileName ?? 'hivas.m4a', size: fileSize(audio) }, deps(abort.signal))
       : await processTranscript(s, keys, n.transcript, deps(abort.signal));
-    patch(id, { status: 'done', segments: out.segments, speakerMethod: out.speakerMethod, transcript: out.transcript, summary: out.summary, summaryByLLM: out.summaryByLLM });
+    patch(id, { status: 'done', segments: out.segments, speakerMethod: out.speakerMethod, transcript: out.transcript, summary: out.summary, summaryByLLM: out.summaryByLLM, audioUri: undefined, error: undefined });
+    if (audio) {
+      try { FlowSession.deleteFile(audio); } catch { /* the transcript is already saved */ }
+    }
   } catch (e) {
-    patch(id, { status: 'error', error: friendly(e) });
+    patch(id, { status: callStatusOf(e), error: friendly(e) });
   } finally {
     running.delete(id);
   }

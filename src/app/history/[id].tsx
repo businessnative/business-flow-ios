@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { polishPrompt } from '@/engine/prompts';
 import { allPolishPresets } from '@/engine/types';
+import { canCopy, canRetry, historyReason, historyStatus, historyStatusLabel, recoverableText } from '@/history/recovery';
 import { retryHistoryItem } from '@/session/controller';
 import { OpenAIError } from '@/services/openai';
 import { chatAny } from '@/services/providers';
@@ -21,6 +22,12 @@ export default function HistoryDetail() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   if (!item) return <SafeAreaView style={{ flex: 1, backgroundColor: C.base }} />;
+  const status = historyStatus(item);
+  const reason = historyReason(item);
+  const text = recoverableText(item);
+  const label = historyStatusLabel[status];
+  const copy = canCopy(item);
+  const retry = canRetry(item);
 
   const polish = async (presetId: string) => {
     const p = allPolishPresets(settings).find((x) => x.id === presetId);
@@ -46,27 +53,31 @@ export default function HistoryDetail() {
           <Label>{new Date(item.date).toLocaleString('hu-HU')}</Label>
           <Button small kind="ghost" title="Bezár" onPress={() => router.back()} />
         </View>
-        {item.error ? (
-          <Card style={{ marginTop: S.x4, borderColor: C.error }}>
-            <Text style={[T.body, { color: C.error }]}>{item.error}</Text>
-            {item.audioUri ? <View style={{ marginTop: S.x3 }}><Button title="Újrapróbálás" icon="refresh" onPress={() => void retryHistoryItem(item)} /></View> : null}
+        {reason ? (
+          <Card style={{ marginTop: S.x4, borderColor: status === 'missed' ? C.warning : C.error }}>
+            {label ? <Label style={{ color: status === 'missed' ? C.warning : C.error, marginBottom: 6 }}>{label}</Label> : null}
+            <Text style={[T.body, { color: status === 'missed' ? C.warning : C.error }]}>{reason}</Text>
+            {retry ? <View style={{ marginTop: S.x3 }}><Button title="Újrapróbálás" icon="refresh" onPress={() => void retryHistoryItem(item)} /></View> : null}
           </Card>
-        ) : (
+        ) : null}
+        {text ? (
           <Card style={{ marginTop: S.x4 }}>
-            <Text style={[T.body, { fontSize: 17, lineHeight: 25 }]} selectable>{item.text}</Text>
-            {item.rawText && item.rawText !== item.text ? (
+            <Text style={[T.body, { fontSize: 17, lineHeight: 25 }]} selectable>{text}</Text>
+            {item.rawText && item.rawText !== text ? (
               <>
                 <Label style={{ marginTop: S.x4 }}>{item.kind === 'polish' ? 'Eredeti' : 'Nyers átirat'}</Label>
                 <Text style={[T.small, { marginTop: 4 }]} selectable>{item.rawText}</Text>
               </>
             ) : null}
           </Card>
-        )}
-        {!item.error ? (
+        ) : null}
+        {copy ? (
+          <View style={{ flexDirection: 'row', gap: S.x3, marginTop: S.x4 }}>
+            <View style={{ flex: 1 }}><Button title="Másolás" icon="copy" onPress={() => void Clipboard.setStringAsync(text)} /></View>
+          </View>
+        ) : null}
+        {text && (status === 'success' || status === 'missed') ? (
           <>
-            <View style={{ flexDirection: 'row', gap: S.x3, marginTop: S.x4 }}>
-              <View style={{ flex: 1 }}><Button title="Másolás" icon="copy" onPress={() => void Clipboard.setStringAsync(item.text)} /></View>
-            </View>
             <Label style={{ marginTop: S.x6, marginBottom: S.x2 }}>Csiszolás (LLM)</Label>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.x2 }}>
               {allPolishPresets(settings).map((p) => (

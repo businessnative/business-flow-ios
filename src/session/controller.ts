@@ -6,7 +6,9 @@ import FlowSession from '../../modules/flow-session';
 import { cleanTranscript } from '@/engine/audioPrep';
 import { formatDictation } from '@/engine/formatter';
 import { contextNames } from '@/engine/rules';
-import { newId, sessionTimeoutMs, type AppCategory, type HistoryItem } from '@/engine/types';
+import { discardAudio, persistDictationAudio } from '@/history/audio';
+import { canRetry as canRetryItem, toHistoryItem } from '@/history/recovery';
+import { newId, sessionTimeoutMs, type AppCategory, type HistoryItem, type HistoryStatus } from '@/engine/types';
 import { readAllKeys } from '@/state/keychain';
 import { addHistory, getState, updateHistory } from '@/state/store';
 import { OpenAIError, errorMessage } from '@/services/openai';
@@ -112,9 +114,9 @@ async function onWatchdog(fire: WatchdogFire) {
           return;
         } catch {}
       }
-      FlowSession.cancelRecording();
-      if (j) publish(j.id, 'error', { error: watchdogMessage.micStall });
       job = null;
+      if (j) await salvageStall(j);
+      else set({ phase: 'idle' });
       return scheduleIdle();
     case 'startTimeout':
       FlowSession.cancelRecording();
@@ -136,6 +138,23 @@ async function onWatchdog(fire: WatchdogFire) {
   }
 }
 const timedOutJobs = new WeakSet<Job>();
+
+/** Second mic stall: keep whatever was recorded and list it, instead of throwing the samples away. */
+async function salvageStall(j: Job) {
+  const reason = 'A mikrofon elhallgatott. A hallott rész megmaradt, az Előzményekből újrapróbálhatod.';
+  try {
+    const r = await FlowSession.stopRecording();
+    if (!r?.uri || r.silent) {
+      if (r?.uri) discardAudio(r.uri);
+      publish(j.id, 'error', { error: watchdogMessage.micStall });
+      return;
+    }
+    remember({ j, uri: r.uri, seconds: r.seconds, speechSeconds: r.speechSeconds, historyId: null, status: 'interrupted', reason });
+    publish(j.id, 'error', { error: reason });
+  } catch {
+    publish(j.id, 'error', { error: watchdogMessage.micStall });
+  }
+}
 
 export function initSession() {
   if (initialised) return;
@@ -253,6 +272,7 @@ export async function start(j: Omit<Job, 'abort'>, mode: 'toggle' | 'ptt' = 'tog
     }
     await FlowSession.startRecording();
     publish(j.id, 'recording');
+    set({ lastText: null });
   } catch {
     publish(j.id, 'error', { error: 'Nem sikerült elindítani a felvételt.' });
     job = null;
@@ -276,14 +296,17 @@ export async function stop(notice?: string) {
   try {
     const r = await FlowSession.stopRecording();
     if (r.silent) {
-      FlowSession.deleteFile(r.uri);
+      // Accidental tap / no speech: nothing to recover.
+      discardAudio(r.uri);
       publish(j.id, 'error', { error: 'Nem hallottunk semmit. Próbáld újra.' });
       job = null;
       return scheduleIdle();
     }
     await process(j, r.uri, r.seconds, r.speechSeconds, null);
   } catch {
-    publish(j.id, 'error', { error: 'A felvétel feldolgozása nem sikerült.' });
+    const reason = 'A felvétel feldolgozása nem sikerült.';
+    remember({ j, uri: null, seconds: 0, speechSeconds: 0, historyId: null, status: 'failed', reason });
+    publish(j.id, 'error', { error: reason });
     job = null;
   }
   scheduleIdle();
@@ -314,6 +337,56 @@ export async function retryLast() {
   if (lastFailed) await retry(lastFailed.job.id + '-r');
 }
 
+function outcomeOf(e: unknown, timedOut: boolean): { status: HistoryStatus; reason: string } {
+  if (timedOut) return { status: 'interrupted', reason: watchdogMessage.processingTimeout };
+  if (e instanceof OpenAIError) {
+    if (e.kind === 'emptyResult') return { status: 'empty', reason: 'Nem hallottunk semmit.' };
+    if (e.kind === 'cancelled') return { status: 'interrupted', reason: 'Az átírás megszakadt. A hang megmaradt, az Előzményekből újrapróbálhatod.' };
+    return { status: 'failed', reason: e.message || errorMessage(e.kind) };
+  }
+  return { status: 'failed', reason: 'Ismeretlen hiba.' };
+}
+
+/** Writes one attempt into History. Audio is copied on-device only when we still need it for Retry. */
+function remember(o: {
+  j: Job;
+  uri: string | null;
+  seconds: number;
+  speechSeconds: number;
+  historyId: string | null;
+  status: HistoryStatus;
+  reason?: string;
+  text?: string;
+  rawText?: string;
+}) {
+  const hid = o.historyId ?? o.j.id;
+  const keepAudio = o.status === 'failed' || o.status === 'interrupted' || o.status === 'empty';
+  const audioUri = keepAudio && o.uri ? persistDictationAudio(o.uri, hid) : undefined;
+  if (keepAudio && audioUri) lastFailed = { job: o.j, uri: audioUri, seconds: o.seconds, speechSeconds: o.speechSeconds, historyId: hid };
+  else if (o.uri) discardAudio(o.uri);
+  if (!keepAudio) lastFailed = null;
+  const delivery = o.j.source === 'keyboard' && o.status === 'success' ? 'pending' : 'app';
+  const item = toHistoryItem({
+    id: hid,
+    date: Date.now(),
+    text: o.text ?? '',
+    rawText: o.rawText ?? '',
+    category: o.j.category,
+    durationSeconds: o.seconds,
+    status: o.status,
+    reason: o.reason,
+    audioUri,
+    delivery,
+    insertId: o.j.id,
+  });
+  const { settings } = getState();
+  const recoverable = item.status !== 'success' || item.delivery === 'pending';
+  const patch: Partial<HistoryItem> = { ...item, error: item.error, reason: item.reason, audioUri: item.audioUri, status: item.status, delivery: item.delivery, insertId: item.insertId };
+  if (getState().history.some((i) => i.id === hid)) updateHistory(hid, patch);
+  else if (recoverable || settings.retention !== 'never') addHistory(item);
+  if ((o.text ?? '').trim()) set({ lastText: o.text });
+}
+
 async function process(j: Job, uri: string, seconds: number, speechSeconds: number, historyId: string | null) {
   // A connection probe started at launch must not share the radio with the upload.
   cancelProviderWarmup();
@@ -325,14 +398,15 @@ async function process(j: Job, uri: string, seconds: number, speechSeconds: numb
   const k = await withTimeout(readAllKeys(), LIMITS.keychainMs, { keys: {}, error: undefined });
   const keyErr = k.timedOut ? 'A kulcstartó nem válaszolt. Oldd fel a telefont, majd koppints az Újra gombra.' : k.value.error && !k.value.keys[settings.transcriptionProvider] ? k.value.error : null;
   if (keyErr) {
-    lastFailed = { job: j, uri, seconds, speechSeconds, historyId: historyId ?? newId() };
-    publish(j.id, 'error', { error: keyErr });
+    remember({ j, uri, seconds, speechSeconds, historyId, status: 'failed', reason: keyErr });
+    if (job === j) publish(j.id, 'error', { error: keyErr });
     if (job === j) job = null;
     return;
   }
   const keys = k.value.keys;
   const t1 = Date.now();
-  const hid = historyId ?? newId();
+  let produced = '';
+  let rawKept = '';
   try {
     const ctx = { before: j.before, after: j.after, appName: '', isSecure: false };
     const terms = [...settings.dictionary.map((d) => d.term), ...contextNames(ctx)];
@@ -346,45 +420,50 @@ async function process(j: Job, uri: string, seconds: number, speechSeconds: numb
       seconds,
     });
     const t2 = Date.now();
+    rawKept = raw;
     if (timedOutJobs.has(j)) throw new OpenAIError('timeout');
-    if (abort.signal.aborted || job !== j) return;
+    if (abort.signal.aborted || (job !== j && !timedOutJobs.has(j))) {
+      discardAudio(uri);
+      return;
+    }
     const cleaned = cleanTranscript(raw, speechSeconds);
-    if (!cleaned) throw new OpenAIError('emptyResult');
+    if (!cleaned) {
+      rawKept = '';
+      throw new OpenAIError('emptyResult');
+    }
+    produced = cleaned;
+    rawKept = cleaned;
     const chat = settings.smartFormatting ? routedChatProvider(settings, keys) : null;
     const formatted = await formatDictation(cleaned, settings, ctx, j.category, chat);
-    if (abort.signal.aborted || job !== j) return;
+    produced = formatted.text;
+    if (abort.signal.aborted || (job !== j && !timedOutJobs.has(j))) {
+      // The user cancelled after the text existed. Keep the text, drop the audio.
+      remember({ j, uri, seconds, speechSeconds, historyId, status: 'missed', reason: 'A diktálást megszakítottad, a szöveg megmaradt.', text: formatted.text, rawText: cleaned });
+      return;
+    }
     const t3 = Date.now();
     set({ timings: { keychainMs: t1 - t0, transcribeMs: t2 - t1, formatMs: t3 - t2, totalMs: t3 - t0, provider, usedLLM: !!formatted.usedLLM } });
     const text = j.source === 'keyboard' ? insertionText(j.before, formatted.text) : formatted.text;
+    remember({ j, uri, seconds, speechSeconds, historyId, status: 'success', text: formatted.text, rawText: cleaned });
     publish(j.id, 'done', { text });
-    const item: HistoryItem = { id: hid, date: Date.now(), text: formatted.text, rawText: cleaned, category: j.category, durationSeconds: seconds, kind: 'dictation' };
-    if (historyId) updateHistory(hid, { ...item, error: undefined, audioUri: undefined });
-    else if (settings.retention !== 'never') addHistory(item);
-    FlowSession.deleteFile(uri);
-    lastFailed = null;
   } catch (e) {
     const timedOut = timedOutJobs.has(j);
     if (abort.signal.aborted && !timedOut) {
-      FlowSession.deleteFile(uri);
+      if (produced.trim()) remember({ j, uri, seconds, speechSeconds, historyId, status: 'missed', reason: 'A diktálást megszakítottad, a szöveg megmaradt.', text: produced, rawText: rawKept });
+      else discardAudio(uri);
       return;
     }
-    const msg = timedOut
-      ? watchdogMessage.processingTimeout
-      : e instanceof OpenAIError ? (e.kind === 'emptyResult' ? 'Nem hallottunk semmit.' : e.message || errorMessage(e.kind)) : 'Ismeretlen hiba.';
-    // Keep the audio so "Újra" can resend it; the failed dictation is listed in History (like Wispr).
-    lastFailed = { job: j, uri, seconds, speechSeconds, historyId: hid };
-    const item: HistoryItem = { id: hid, date: Date.now(), text: '', rawText: '', category: j.category, durationSeconds: seconds, kind: 'dictation', audioUri: uri, error: msg };
-    if (historyId) updateHistory(hid, { error: msg });
-    else addHistory(item);
-    if (job === j) publish(j.id, 'error', { error: msg });
+    const { status, reason } = outcomeOf(e, timedOut);
+    remember({ j, uri, seconds, speechSeconds, historyId, status, reason, text: produced, rawText: rawKept });
+    if (job === j) publish(j.id, 'error', { error: reason, ...(produced.trim() ? { text: produced } : {}) });
   } finally {
     if (job === j) job = null;
   }
 }
 
-/** Retry a failed History item (uses its saved audio). */
+/** Retry a failed History item from its saved audio. Nothing is uploaded until this runs. */
 export async function retryHistoryItem(item: HistoryItem) {
-  if (!item.audioUri) return;
+  if (!canRetryItem(item) || !item.audioUri) return;
   lastFailed = { job: { id: newId(), category: item.category, before: '', after: '', source: 'app' }, uri: item.audioUri, seconds: item.durationSeconds, speechSeconds: item.durationSeconds, historyId: item.id };
   await retryLast();
 }

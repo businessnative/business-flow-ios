@@ -1,4 +1,4 @@
-// businessnative-dark tokens (bn-flow-mac/docs/tokens.json).
+// businessnative-dark tokens (business-flow-mac/docs/tokens.json).
 export const C = {
   base: '#0a0a0b',
   lift: '#121212',

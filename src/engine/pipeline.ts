@@ -1,4 +1,4 @@
-// TypeScript port of bn-flow-mac Sources/BNFlowCore/TextPipeline.swift.
+// TypeScript port of business-flow-mac Sources/BNFlowCore/TextPipeline.swift.
 import { chars, count, eqCI, isLetter, isNumber, isUpper, isWhitespace, last, stripDiacritics, trimPunct, trimPunctWSNL, trimWS, trimWSNL } from './chars';
 import { escapeRe, replaceAll, replaceWith, test } from './regex';
 import * as R from './rules';

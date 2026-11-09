@@ -1,4 +1,4 @@
-// Regex helpers that keep the Swift (ICU) patterns of bn-flow-mac readable in TypeScript.
+// Regex helpers that keep the Swift (ICU) patterns of business-flow-mac readable in TypeScript.
 // \p{L}, \p{Lu}, \p{Ll}, \p{N} tokens are expanded into explicit ranges (unicodeClasses.ts),
 // so the engine runs the same on Hermes, JSC and Node without relying on Unicode property escapes.
 import { L, Ll, Lu, N, P } from './unicodeClasses';

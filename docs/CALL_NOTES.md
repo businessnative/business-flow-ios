@@ -18,7 +18,7 @@ Az app minden előtérbe kerüléskor beolvassa az inboxot (`importInbox` a `_la
   3. Rossz kulcs, keret, megszakítás → nincs csendes fallback, magyar hiba + Újra.
 - Leirat: a „Név:” jelölések és az időbélyegek megmaradnak; jelöletlen szövegnél LLM-bontás.
 - Összefoglaló: JSON (cím, összefoglaló, döntések, teendők, követés, fontos adatok). Kulcs vagy LLM nélkül helyi kivonat, jelölve.
-- Tárolás: AsyncStorage `bf.calls.v1` (max. 300). A hang helyben marad az Újra gombhoz, és törléskor törlődik.
+- Tárolás: AsyncStorage `bf.calls.v1` (max. 300). Sikertelen, üres vagy megszakadt átírásnál a hang a telefonon marad, és csak az Újra küldi el újra a szolgáltatónak. Siker vagy törlés után a fájl törlődik. API-kulcs nem kerül a jegyzetbe.
 
 ## Korlátok
 - A `gpt-4o-transcribe-diarize` modellt az OpenAI 2027-02-26-án kivezeti. Utána a szöveges LLM-bontás marad (`callDiarize` beállítás).

@@ -2,6 +2,7 @@
 // Source of audio/transcripts is iOS 18+ native call recording (Phone app → Notes); apps cannot tap call audio.
 
 export type CallSource = 'audio' | 'transcript' | 'speakerphone';
+export type CallStatus = 'processing' | 'done' | 'error' | 'interrupted' | 'empty';
 /** How speakers were separated: model diarization, LLM guess from text, labels found in the Notes transcript, or none. */
 export type SpeakerMethod = 'diarize' | 'llm' | 'notes' | 'none';
 
@@ -24,7 +25,7 @@ export interface CallNote {
   id: string;
   date: number;
   source: CallSource;
-  status: 'processing' | 'done' | 'error';
+  status: CallStatus;
   error?: string;
   fileName?: string;
   durationSeconds?: number;
@@ -36,7 +37,7 @@ export interface CallNote {
   summary: CallSummary | null;
   /** False when the offline fallback summary was used (no key / LLM failed). */
   summaryByLLM?: boolean;
-  /** Kept only until processing succeeds, so a failed import can be retried. */
+  /** On-device audio. Kept when transcription failed, came back empty, or was interrupted; removed after success or delete. */
   audioUri?: string;
 }
 
@@ -194,4 +195,16 @@ export function exportText(n: CallNote): string {
   }
   lines.push('Leirat', transcriptText(n.segments, Object.fromEntries(Object.keys(n.speakerNames).map((k) => [k, displayName(n, k)]))));
   return lines.join('\n').trim();
+}
+
+/** Text the user can copy even when the note did not finish (pasted transcript, partial segments). */
+export function callCopyText(n: CallNote): string {
+  if (n.segments.length || n.summary) return exportText(n);
+  return n.transcript.trim();
+}
+
+/** Retry sends saved audio only for a failed, empty, or interrupted transcription. A text-only note can be reprocessed too. */
+export function callCanRetry(n: CallNote): boolean {
+  if (n.status !== 'error' && n.status !== 'interrupted' && n.status !== 'empty') return false;
+  return !!n.audioUri || !!n.transcript.trim() || n.segments.length > 0;
 }

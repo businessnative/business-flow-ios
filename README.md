@@ -88,3 +88,8 @@ A becslés közelítő (a magyar szöveg tokenszáma, a szótár/környezet hoss
 - Szótár, szövegrészletek, stílusok kategóriánként, előzmények
 - Hívás-jegyzetek: iOS 18 hívásfelvétel / Jegyzetek-átirat megosztása → átirat beszélőkkel + összefoglaló (`docs/CALL_NOTES.md`)
 - Több szolgáltató: OpenAI, Gemini, Anthropic – mind a saját kulcsoddal
+
+## Újdonságok a 0.4.2-ban
+
+- **Diktálás- és hívásjegyzet-mentés:** ha az átírás hibára fut vagy megszakad, a szöveg / jegyzet helyben megmarad, kimásolható és újrapróbálható.
+- Kerethiba (BYOK): *„Elfogyott az átírás kerete…”* – a saját OpenAI/Gemini számlán kell keretet adni.

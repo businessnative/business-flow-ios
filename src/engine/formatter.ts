@@ -1,4 +1,4 @@
-// TypeScript port of bn-flow-mac Sources/BNFlowCore/Formatter.swift: local pipeline + optional guarded LLM pass.
+// TypeScript port of business-flow-mac Sources/BNFlowCore/Formatter.swift: local pipeline + optional guarded LLM pass.
 import { chars, isLetter, isNumber, trimWSNL } from './chars';
 import { processText, textWordCount } from './pipeline';
 import { cleanOutput, smartFormattingPrompt, smartFormattingUser } from './prompts';

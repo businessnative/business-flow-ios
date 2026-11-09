@@ -1,4 +1,4 @@
-// Per-state watchdogs and the start/stop decision table (port of bn-flow-mac 0.3.1 reliability fixes).
+// Per-state watchdogs and the start/stop decision table (port of business-flow-mac 0.3.1 reliability fixes).
 // Pure functions so the state machine is unit-tested without native modules.
 import type { Phase } from './protocol';
 

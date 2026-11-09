@@ -46,7 +46,7 @@ export default function Settings() {
         <Segmented<HistoryRetention> options={(['forever', 'days30', 'days7', 'never'] as const).map((v) => ({ value: v, label: retentionLabels[v] }))} value={s.retention} onChange={(retention) => updateSettings({ retention })} />
       </View>
       <Section label="Adatvédelem">
-        <Row title="A hang csak az átíráshoz megy a választott szolgáltatóhoz" detail="A saját kulcsoddal, közvetlenül. Az előzmények csak ezen a telefonon vannak." last />
+        <Row title="A hang csak az átíráshoz megy a választott szolgáltatóhoz" detail="A saját kulcsoddal, közvetlenül. Ha az átírás nem sikerül, a felvétel a telefonon marad, és csak az Újra küldi el újra. Az előzmények csak ezen a telefonon vannak." last />
       </Section>
       <Text style={[T.label, { marginTop: S.x8, textAlign: 'center' }]}>Business Flow iOS 0.4.1 · businessnative</Text>
     </Screen>

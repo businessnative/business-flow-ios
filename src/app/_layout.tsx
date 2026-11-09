@@ -13,7 +13,7 @@ import { prewarmTextPipeline } from '@/engine/pipeline';
 import { initSession } from '@/session/controller';
 import { warmTranscriptionConnection } from '@/services/providers';
 import { readAllKeys } from '@/state/keychain';
-import { getState, loadStore, useApp } from '@/state/store';
+import { getState, loadStore, syncInsertAcks, useApp } from '@/state/store';
 import { C } from '@/ui/theme';
 
 // Keep the native splash up until fonts and stored settings are ready. The Keychain read is not on this path.
@@ -36,7 +36,11 @@ export default function RootLayout() {
     initSession();
     // Share Extension items (call recordings / transcripts) are picked up whenever the app becomes active.
     void importInbox().catch(() => {});
-    const sub = AppState.addEventListener('change', (st) => st === 'active' && void importInbox().catch(() => {}));
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active') return;
+      syncInsertAcks();
+      void importInbox().catch(() => {});
+    });
     return () => sub.remove();
   }, []);
   useEffect(() => {

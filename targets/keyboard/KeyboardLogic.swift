@@ -40,4 +40,18 @@ enum KeyboardLogic {
     guard phase == "done", id == pendingId, !inserted.contains(id), let t = text, !t.isEmpty else { return false }
     return now - ts < freshS
   }
+
+  /// Ids the keyboard has inserted, newest last, capped so the app can mark those history rows as landed.
+  static func rememberLanded(_ existingJSON: String?, _ id: String) -> String {
+    var ids: [String] = []
+    if let existingJSON, let data = existingJSON.data(using: .utf8),
+       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String] {
+      ids = parsed
+    }
+    if !ids.contains(id) { ids.append(id) }
+    let trimmed = Array(ids.suffix(20))
+    guard let data = try? JSONSerialization.data(withJSONObject: trimmed),
+          let s = String(data: data, encoding: .utf8) else { return "[]" }
+    return s
+  }
 }

@@ -1,4 +1,4 @@
-// TypeScript port of bn-flow-mac Sources/BNFlowCore/TextRules.swift (Business Flow desktop).
+// TypeScript port of business-flow-mac Sources/BNFlowCore/TextRules.swift (Business Flow desktop).
 // Local, deterministic Hungarian-first rules: backtracking, lists, commas, question marks, quotes,
 // accents, spoken addresses, acronyms, e-mail layout, cursor context. No network.
 import { chars, count, eqCI, first, isLetter, isLower, isNumber, isUpper, last, trimBy, trimPunct, trimPunctWSNL, trimWS } from './chars';

@@ -1,4 +1,4 @@
-// TypeScript port of bn-flow-mac Sources/BNFlowCore/Prompts.swift (Hungarian prompts kept as in the desktop app).
+// TypeScript port of business-flow-mac Sources/BNFlowCore/Prompts.swift (Hungarian prompts kept as in the desktop app).
 import { trimWS, trimWSNL } from './chars';
 import type { AppCategory, DictationContext, DictationLanguage, StyleTone } from './types';
 

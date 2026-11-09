@@ -25,6 +25,7 @@ const h = vi.hoisted(() => {
       publishState: vi.fn(),
       playCue: vi.fn(),
       deleteFile: vi.fn(),
+      copied: [] as [string, string][],
       getShared: vi.fn(() => null),
       setShared: vi.fn(),
       addListener: vi.fn((name: string, cb: (e: any) => void) => { (listeners[name] ??= []).push(cb); return { remove() {} }; }),
@@ -37,12 +38,23 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock('../../../modules/flow-session', () => ({ default: h.fs }));
-vi.mock('expo-file-system', () => ({ File: class { constructor(public u: string) {} async base64() { return 'UklGRg=='; } } }));
+vi.mock('expo-file-system', () => ({
+  File: class {
+    uri: string;
+    exists = false;
+    constructor(a: any, b?: any) { this.uri = typeof b === 'string' ? `file:///docs/dictation-audio/${b}` : String(a); }
+    async base64() { return 'UklGRg=='; }
+    copy(dest: { uri: string }) { h.fs.copied.push([this.uri, dest.uri]); }
+    delete() {}
+  },
+  Directory: class { exists = false; create() { this.exists = true; } },
+  Paths: { document: 'file:///docs' },
+}));
 vi.mock('@/state/keychain', () => ({ readAllKeys: vi.fn(() => (h.keys.value === 'hang' ? new Promise(() => {}) : Promise.resolve(h.keys.value))) }));
 vi.mock('@/state/store', () => ({
   getState: () => h.state,
-  addHistory: vi.fn((i: any) => h.state.history.unshift(i)),
-  updateHistory: vi.fn(),
+  addHistory: vi.fn((i: any) => { h.state.history = [i, ...h.state.history.filter((x: any) => x.id !== i.id)]; }),
+  updateHistory: vi.fn((id: string, patch: any) => { h.state.history = h.state.history.map((x: any) => (x.id === id ? { ...x, ...patch } : x)); }),
 }));
 
 type Route = (url: string, init: any) => Promise<Response | "hang"> | "hang";
@@ -54,6 +66,7 @@ const okRoute: Route = async (url) =>
   : url.includes('generateContent') ? json(200, { candidates: [{ content: { parts: [{ text: 'szia ez egy teszt' }] } }] })
   : json(404, {});
 const calls: string[] = [];
+const forms: { parts: [string, unknown][] }[] = [];
 
 async function load(patch: Partial<AppSettings> = {}) {
   vi.resetModules();
@@ -61,6 +74,7 @@ async function load(patch: Partial<AppSettings> = {}) {
   h.state.settings = { ...defaultSettings(), smartFormatting: false, ...patch };
   h.state.history = [];
   calls.length = 0;
+  forms.length = 0;
   return import('../controller');
 }
 const flush = async (n = 20) => { for (let i = 0; i < n; i++) await Promise.resolve(); };
@@ -68,7 +82,7 @@ const flush = async (n = 20) => { for (let i = 0; i < n; i++) await Promise.reso
 beforeEach(() => {
   route = okRoute;
   h.keys.value = { keys: { openai: 'sk-test' } };
-  (globalThis as any).FormData = class { append() {} };
+  (globalThis as any).FormData = class { parts: [string, unknown][] = []; constructor() { forms.push(this); } append(k: string, v: unknown) { this.parts.push([k, v]); } };
   globalThis.fetch = vi.fn((url: any, init: any) => {
     calls.push(String(url));
     const r = route(String(url), init);
@@ -386,5 +400,138 @@ describe('silence, long recordings, settings, latency', () => {
     expect(t).toBeTruthy();
     for (const k of ['keychainMs', 'transcribeMs', 'formatMs', 'totalMs']) expect(typeof t[k]).toBe('number');
     expect(t.provider).toBe('openai');
+  });
+});
+
+const secret = () => 'sk-' + 'c'.repeat(24);
+const savedUri = (id = 'j1') => `file:///docs/dictation-audio/${id}.wav`;
+
+describe('dictation recovery', () => {
+  it('[E-REC-01] network, keychain and empty attempts are stored with a Hungarian reason and on-device audio', async () => {
+    let c = await load();
+    route = async () => { throw new TypeError('Network request failed'); };
+    await appStart(c);
+    await c.stop();
+    expect(c.getSession().phase).toBe('error');
+    expect(h.state.history[0]).toMatchObject({ status: 'failed', audioUri: savedUri() });
+    expect(h.state.history[0].reason ?? h.state.history[0].error).toMatch(/hálózat/i);
+    expect(h.fs.deleteFile).toHaveBeenCalledWith('file:///tmp/a.wav');
+    expect(h.fs.deleteFile).not.toHaveBeenCalledWith(savedUri());
+
+    c = await load();
+    h.keys.value = { keys: {}, error: 'Nem sikerült kiolvasni az API-kulcsot a kulcstartóból. Mentsd el újra a Beállításokban.' };
+    await appStart(c);
+    await c.stop();
+    expect(calls).toHaveLength(0);
+    expect(h.state.history[0]).toMatchObject({ status: 'failed', audioUri: savedUri() });
+    expect(h.state.history[0].reason ?? '').toMatch(/kulcs|kulcstartó/i);
+
+    c = await load();
+    h.keys.value = { keys: { openai: 'sk-test' } };
+    h.fs.stopRecording.mockResolvedValueOnce({ uri: 'file:///tmp/s.wav', seconds: 4, speechSeconds: 0.3, silent: false });
+    route = async (url) => (url.includes('transcriptions') ? json(200, { text: 'Köszönöm a figyelmet!' }) : okRoute(url, {}));
+    await c.start({ id: 'empty1', category: 'other', before: '', after: '', source: 'app' });
+    await c.stop();
+    expect(h.state.history[0]).toMatchObject({ id: 'empty1', status: 'empty', audioUri: 'file:///docs/dictation-audio/empty1.wav' });
+    expect(h.state.history[0].text).toBe('');
+    expect(h.state.history[0].rawText).toBe('');
+    expect(JSON.stringify(h.state.history[0])).not.toContain('Köszönöm');
+  });
+
+  it('[E-REC-01] a stalled mic keeps the recording as an interrupted history row', async () => {
+    const c = await load();
+    await appStart(c);
+    h.fs.bufferAgeMs.mockReturnValue(3000);
+    c.tick(Date.now() + 2000);
+    await flush();
+    c.tick(Date.now() + 100);
+    await flush();
+    expect(c.getSession().phase).toBe('error');
+    expect(h.state.history[0]).toMatchObject({ status: 'interrupted', audioUri: savedUri() });
+    expect(h.state.history[0].reason ?? '').toMatch(/mikrofon|Előzmény/i);
+  });
+
+  it('[E-REC-02] keyboard text stays in history when the field never confirms the insert', async () => {
+    const c = await load({ retention: 'never' });
+    await c.start({ id: 'kb1', category: 'email', before: 'Helló', after: '', source: 'keyboard' });
+    await c.stop();
+    expect(c.getSession().phase).toBe('done');
+    const row = h.state.history[0];
+    expect(row.delivery).toBe('pending');
+    expect(row.insertId).toBe('kb1');
+    expect(row.text.length).toBeGreaterThan(0);
+    expect(row.audioUri).toBeUndefined();
+    expect(c.getSession().lastText).toBeTruthy();
+  });
+
+  it('[E-REC-03] retry uploads the saved audio and does not upload again until then', async () => {
+    const c = await load();
+    h.keys.value = { keys: {}, error: 'Nem sikerült kiolvasni az API-kulcsot a kulcstartóból.' };
+    await appStart(c);
+    await c.stop();
+    expect(calls).toHaveLength(0);
+    const uri = h.state.history[0].audioUri as string;
+    expect(uri).toBe(savedUri());
+    const n = calls.length;
+    await flush();
+    expect(calls).toHaveLength(n);
+    h.keys.value = { keys: { openai: 'sk-test' } };
+    route = okRoute;
+    await c.retryHistoryItem(h.state.history[0]);
+    expect(c.getSession().phase).toBe('done');
+    expect(calls.length).toBeGreaterThan(n);
+    const sent = forms.flatMap((f) => f.parts.filter((p) => p[0] === 'file').map((p) => (p[1] as { uri?: string }).uri));
+    expect(sent).toContain(uri);
+    expect(h.state.history[0].status).toBe('success');
+    expect(h.state.history[0].audioUri).toBeUndefined();
+    expect(h.state.history[0].text.length).toBeGreaterThan(0);
+  });
+
+  it('[E-REC-04] a successful dictation is stored and its audio is deleted', async () => {
+    const c = await load();
+    await appStart(c);
+    await c.stop();
+    expect(c.getSession().phase).toBe('done');
+    expect(h.state.history[0].status).toBe('success');
+    expect(h.state.history[0].text.length).toBeGreaterThan(0);
+    expect(h.state.history[0].audioUri).toBeUndefined();
+    expect(h.state.history[0].error).toBeUndefined();
+    expect(h.fs.copied).toHaveLength(0);
+    expect(h.fs.deleteFile).toHaveBeenCalledWith('file:///tmp/a.wav');
+    expect(c.getSession().lastText).toBe(h.state.history[0].text);
+  });
+
+  it('[E-REC-05] history never contains the API key or a dictated key', async () => {
+    const key = secret();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const c = await load();
+      h.keys.value = { keys: { openai: key } };
+      route = async (url) => (url.includes('transcriptions') ? json(200, { text: `a kulcs ${key} marad` }) : okRoute(url, {}));
+      await appStart(c);
+      await c.stop();
+      const blob = JSON.stringify(h.state.history);
+      expect(blob).not.toContain(key);
+      expect(blob).not.toMatch(/Bearer |apiKey/);
+      expect(h.state.history[0].text).not.toContain(key);
+      const logged = [log, info, warn, debug, err].flatMap((s) => s.mock.calls).map((a) => JSON.stringify(a));
+      expect(logged.join('\n')).not.toContain(key);
+    } finally {
+      log.mockRestore(); info.mockRestore(); warn.mockRestore(); debug.mockRestore(); err.mockRestore();
+    }
+  });
+
+  it('[E-REC-06] a silent tap is not stored', async () => {
+    const c = await load();
+    h.fs.stopRecording.mockResolvedValueOnce({ uri: 'file:///tmp/s.wav', seconds: 1, speechSeconds: 0, silent: true });
+    await appStart(c);
+    await c.stop();
+    expect(h.state.history).toHaveLength(0);
+    expect(h.fs.copied).toHaveLength(0);
+    expect(c.getSession().error).toMatch(/Nem hallottunk/);
   });
 });

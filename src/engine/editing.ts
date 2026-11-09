@@ -1,4 +1,4 @@
-// TypeScript port of bn-flow-mac Sources/BNFlowCore/Editing.swift + AutoLearn.swift + EvalScoring.
+// TypeScript port of business-flow-mac Sources/BNFlowCore/Editing.swift + AutoLearn.swift + EvalScoring.
 import { chars, eqCI, isLetter, isNumber, isPunct, stripDiacritics, trimBy, trimWS, trimWSNL } from './chars';
 import { escapeRe, test } from './regex';
 import { lev, words } from './rules';
@@ -68,7 +68,7 @@ export function filterHistory(items: HistoryItem[], query: string): HistoryItem[
   const ws = fold(query).split(/\s+/).filter((x) => x);
   if (!ws.length) return items;
   return items.filter((it) => {
-    const hay = fold(it.text + ' ' + it.rawText);
+    const hay = fold([it.text, it.rawText, it.reason, it.error].filter(Boolean).join(' '));
     return ws.every((w) => hay.includes(w));
   });
 }

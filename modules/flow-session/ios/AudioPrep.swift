@@ -1,4 +1,4 @@
-// Copied from bn-flow-mac Sources/BNFlowCore (AudioPrep.swift, WAV.swift) — same VAD / gain / trim on iOS.
+// Copied from business-flow-mac Sources/BNFlowCore (AudioPrep.swift, WAV.swift) — same VAD / gain / trim on iOS.
 import Foundation
 
 public struct AudioStats: Sendable, Equatable {

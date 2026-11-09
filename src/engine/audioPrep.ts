@@ -1,4 +1,4 @@
-// Port of bn-flow-mac AudioPrep.cleanTranscript: drops Whisper-style hallucinations ("köszönöm a figyelmet", "feliratok"…).
+// Port of business-flow-mac AudioPrep.cleanTranscript: drops Whisper-style hallucinations ("köszönöm a figyelmet", "feliratok"…).
 const hallucinations = [
   'köszönöm a figyelmet', 'köszönöm, hogy megnézted', 'köszönöm szépen a figyelmet', 'feliratok', 'feliratozta', 'a feliratot',
   'amara.org', 'thanks for watching', 'thank you for watching', 'subtitles by', 'subscribe', 'iratkozz fel', 'like-old', 'www.',

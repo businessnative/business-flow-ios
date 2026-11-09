@@ -71,5 +71,13 @@
   {"id": "E-CALL-06", "area": "Hívás-jegyzetek", "method": "unit", "title": "Export: beszélőnevek, teendők, leirat", "tests": ["call notes: core export"]},
   {"id": "E-CALL-07", "area": "Hívás-jegyzetek", "method": "swift", "title": "App Group inbox: fájl/szöveg mentés, listázás, áthelyezés, útvonal-szűrés"},
   {"id": "E-CALL-08", "area": "Hívás-jegyzetek", "method": "static", "title": "Share Extension: type share, App Group, aktiválási szabály, inbox-másolatok egyeznek, képernyők megvannak"},
-  {"id": "E-CALL-09", "area": "Hívás-jegyzetek", "method": "manual", "title": "Valódi iOS 18 hívásfelvétel → Jegyzetek → Megosztás → Business Flow → jegyzet"}
+  {"id": "E-CALL-09", "area": "Hívás-jegyzetek", "method": "manual", "title": "Valódi iOS 18 hívásfelvétel → Jegyzetek → Megosztás → Business Flow → jegyzet"},
+  {"id": "E-REC-01", "area": "Visszaállítás", "method": "unit", "title": "Sikertelen, üres vagy kulcstartós diktálás bekerül az előzményekbe, a hang a telefonon marad"},
+  {"id": "E-REC-02", "area": "Visszaállítás", "method": "unit", "title": "A szöveg megmarad és másolható, ha nem került a mezőbe"},
+  {"id": "E-REC-03", "area": "Visszaállítás", "method": "unit", "title": "Újra a mentett hangból; a szolgáltatóhoz csak ekkor megy újra"},
+  {"id": "E-REC-04", "area": "Visszaállítás", "method": "unit", "title": "Sikeres diktálás előzménye megvan, a hang törlődik"},
+  {"id": "E-REC-05", "area": "Visszaállítás", "method": "unit", "title": "Az API-kulcs nem kerül előzménybe, hívás-jegyzetbe vagy logba"},
+  {"id": "E-REC-06", "area": "Visszaállítás", "method": "unit", "title": "Véletlen csendes koppintás nem kerül előzménybe"},
+  {"id": "E-REC-07", "area": "Visszaállítás", "method": "swift", "title": "Sikeres beillesztés azonosítója megmarad a billentyűzetnél"},
+  {"id": "E-REC-08", "area": "Visszaállítás", "method": "unit", "title": "Hívás-jegyzet: hiba, üres és megszakadt sor megmarad, Újra a mentett hangból"}
 ]

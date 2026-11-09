@@ -54,7 +54,8 @@ export default function Calls() {
             <View style={{ flexDirection: 'row', gap: S.x2, marginTop: 4, flexWrap: 'wrap' }}>
               <Label>{new Date(c.date).toLocaleString('hu-HU')}</Label>
               {c.durationSeconds ? <Label>{formatTime(c.durationSeconds)}</Label> : null}
-              {c.status === 'processing' ? <Pill text="Feldolgozás…" color={C.accent} /> : c.status === 'error' ? <Pill text="Hiba" color={C.error} /> : <Pill text={METHOD[c.speakerMethod]} />}
+              {c.status === 'processing' ? <Pill text="Feldolgozás…" color={C.accent} /> : c.status === 'error' ? <Pill text="Sikertelen" color={C.error} /> : c.status === 'interrupted' ? <Pill text="Megszakadt" color={C.warning} /> : c.status === 'empty' ? <Pill text="Üres" color={C.warning} /> : <Pill text={METHOD[c.speakerMethod]} />}
+              {c.error && c.status !== 'done' && c.status !== 'processing' ? <Text style={[T.small, { color: C.error, width: '100%' }]} numberOfLines={2}>{c.error}</Text> : null}
               {c.source === 'speakerphone' ? <Pill text="kihangosított felvétel" color={C.warning} /> : null}
             </View>
           </Pressable>

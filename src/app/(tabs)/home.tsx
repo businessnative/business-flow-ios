@@ -73,8 +73,9 @@ export default function Home() {
           <Text style={[T.small, { marginTop: S.x3, textAlign: 'center' }]}>
             {inApp && session.phase === 'recording' ? 'Figyelek… koppints a ✓-re, ha végeztél.' : inApp && session.phase === 'error' ? session.error : 'Koppints a sávra, és mondd el, amit leírnál.'}
           </Text>
-          {inApp && session.lastText && session.phase !== 'error' ? (
+          {inApp && session.lastText ? (
             <View style={{ alignSelf: 'stretch', marginTop: S.x4, backgroundColor: C.base, borderRadius: 8, padding: S.x3, borderWidth: 1, borderColor: C.text08 }}>
+              {session.phase === 'error' ? <Label style={{ marginBottom: 6 }}>A szöveg megvan, innen kimásolhatod.</Label> : null}
               <Text style={T.body} selectable>{session.lastText}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Másolás" onPress={() => void Clipboard.setStringAsync(session.lastText ?? '')} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', marginTop: S.x2 }}>
                 <Icon name="copy" size={14} color={C.text64} />

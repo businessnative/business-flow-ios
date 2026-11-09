@@ -89,6 +89,8 @@ final class KeyboardViewController: UIInputViewController {
     if model.shouldInsert(st), let text = st.text {
       textDocumentProxy.insertText(text)
       model.markInserted(st.id)
+      let prev = Bridge.shared?.string(forKey: "flow.landedIds")
+      Bridge.shared?.set(KeyboardLogic.rememberLanded(prev, st.id), forKey: "flow.landedIds")
       model.haptic(.success)
     }
   }

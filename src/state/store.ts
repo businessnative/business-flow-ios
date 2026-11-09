@@ -3,7 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
 import FlowSession from '../../modules/flow-session';
-import { mergeSettings, newId, retentionMaxAgeMs, type AppSettings, type HistoryItem } from '@/engine/types';
+import { INSERT_FRESH_MS, MISSED_INSERT_REASON, pruneHistory, scrubHistoryItem } from '@/history/recovery';
+import { discardAudio } from '@/history/audio';
+import { mergeSettings, newId, type AppSettings, type HistoryItem } from '@/engine/types';
 import { readAllKeys } from './keychain';
 import type { ProviderId } from '@/services/providers';
 
@@ -64,8 +66,10 @@ export async function loadStore() {
   try {
     history = h ? JSON.parse(h) : [];
   } catch {}
-  state = { ready: true, settings, history: prune(history, settings), hasKey: false, keys: { ...noKeys }, keysReady: false };
+  state = { ready: true, settings, history: [], hasKey: false, keys: { ...noKeys }, keysReady: false };
+  commitHistory(history);
   emit();
+  syncInsertAcks();
   void settleKeys();
 }
 
@@ -82,17 +86,18 @@ async function settleKeys() {
   emit();
 }
 
-function prune(items: HistoryItem[], s: AppSettings) {
-  const max = retentionMaxAgeMs(s.retention);
-  const now = Date.now();
-  const kept = max === null ? items : max === 0 ? items.filter((i) => i.error) : items.filter((i) => now - i.date < max);
-  return kept.slice(0, MAX_HISTORY);
+function commitHistory(items: HistoryItem[]) {
+  const { kept, dropped } = pruneHistory(items.map(scrubHistoryItem), state.settings.retention, Date.now(), MAX_HISTORY);
+  const keptAudio = new Set(kept.map((i) => i.audioUri).filter(Boolean));
+  for (const d of dropped) if (d.audioUri && !keptAudio.has(d.audioUri)) discardAudio(d.audioUri);
+  state = { ...state, history: kept };
 }
 
 export function updateSettings(patch: Partial<AppSettings> | ((s: AppSettings) => Partial<AppSettings>)) {
   const p = typeof patch === 'function' ? patch(state.settings) : patch;
   const settings = { ...state.settings, ...p };
-  state = { ...state, settings, history: prune(state.history, settings), hasKey: hasKeyFor(state.keys, settings) };
+  state = { ...state, settings, hasKey: hasKeyFor(state.keys, settings) };
+  commitHistory(state.history);
   emit();
   syncKeyboardPrefs();
   void AsyncStorage.setItem(SETTINGS, JSON.stringify(settings));
@@ -108,9 +113,38 @@ export function setKeyPresent(p: ProviderId, present: boolean) {
 }
 
 function saveHistory(history: HistoryItem[]) {
-  state = { ...state, history: prune(history, state.settings) };
+  commitHistory(history);
   emit();
   void AsyncStorage.setItem(HISTORY, JSON.stringify(state.history));
+}
+
+/** Keyboard wrote the ids it actually inserted. Pending rows older than the insert window become recoverable misses. */
+export function syncInsertAcks(now = Date.now()) {
+  let ids: string[] = [];
+  try {
+    const read = FlowSession.getShared;
+    const raw = typeof read === 'function' ? read('flow.landedIds') : null;
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) ids = parsed.filter((x) => typeof x === 'string');
+  } catch {
+    ids = [];
+  }
+  const landed = new Set(ids);
+  let changed = false;
+  const next = state.history.map((i) => {
+    if (i.delivery !== 'pending') return i;
+    if ((i.insertId && landed.has(i.insertId)) || landed.has(i.id)) {
+      changed = true;
+      const landedItem: HistoryItem = { ...i, delivery: 'landed' };
+      return landedItem;
+    }
+    if (now - i.date > INSERT_FRESH_MS) {
+      changed = true;
+      return { ...i, delivery: 'missed' as const, status: 'missed' as const, reason: MISSED_INSERT_REASON, error: MISSED_INSERT_REASON };
+    }
+    return i;
+  });
+  if (changed) saveHistory(next);
 }
 
 export const addHistory = (item: HistoryItem) => saveHistory([item, ...state.history.filter((i) => i.id !== item.id)]);
@@ -119,4 +153,4 @@ export const removeHistory = (id: string) => saveHistory(state.history.filter((i
 export const clearHistory = () => saveHistory([]);
 
 export const addPolished = (from: HistoryItem, text: string) =>
-  addHistory({ ...from, id: newId(), date: Date.now(), text, rawText: from.text, kind: 'polish', audioUri: undefined, error: undefined });
+  addHistory({ ...from, id: newId(), date: Date.now(), text, rawText: from.text, kind: 'polish', status: 'success', delivery: 'app', audioUri: undefined, error: undefined, reason: undefined, insertId: undefined });

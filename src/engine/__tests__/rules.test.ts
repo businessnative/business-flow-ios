@@ -1,4 +1,4 @@
-// Ported from bn-flow-mac Tests/BNFlowCoreTests/TextRulesTests.swift + EditingTests.swift (same expectations).
+// Ported from business-flow-mac Tests/BNFlowCoreTests/TextRulesTests.swift + EditingTests.swift (same expectations).
 import { describe, expect, it } from 'vitest';
 import * as R from '../rules';
 import { applyDictionary, categoryForBundle, processText, removeFillers } from '../pipeline';

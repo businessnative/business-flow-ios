@@ -19,6 +19,11 @@ vi.mock('../keychain', () => ({
 vi.mock('../../../modules/flow-session', () => ({
   default: { setShared: (...a: unknown[]) => h.setShared(...a) },
 }));
+vi.mock('expo-file-system', () => ({
+  File: class { delete() {} },
+  Directory: class { exists = false; create() {} },
+  Paths: { document: 'file:///docs' },
+}));
 
 async function load() {
   vi.resetModules();

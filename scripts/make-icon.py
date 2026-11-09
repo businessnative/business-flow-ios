@@ -1,5 +1,5 @@
 # iOS app icon (1024, full-bleed, no alpha): BN base #0a0a0b, dot-matrix arrow #f6f3ec, accent tip #c0c0e7.
-# Same geometry as bn-flow-mac/scripts/make-icon.swift.
+# Same geometry as business-flow-mac/scripts/make-icon.swift.
 from PIL import Image, ImageDraw
 import sys
 circles = [(1.4,1.4),(1.4,4.6),(1.4,7.8),(1.4,11),(5.4,3),(5.4,6.2),(5.4,9.4),(9.4,4.6),(9.4,7.8),(13.4,6.2)]

@@ -1,4 +1,4 @@
-// Port of bn-flow-mac Sources/BNFlowCore/OpenAIClient.swift (transcription + chat) for React Native fetch.
+// Port of business-flow-mac Sources/BNFlowCore/OpenAIClient.swift (transcription + chat) for React Native fetch.
 import { cleanOutput, transcriptionPrompt } from '@/engine/prompts';
 import { languageCodes, type DictationLanguage } from '@/engine/types';
 import type { ChatResult } from '@/engine/formatter';

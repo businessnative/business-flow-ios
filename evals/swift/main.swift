@@ -43,6 +43,12 @@ check("E-KB-04", !I("a", "done", "", now - 2, now, "a", []), "empty text not ins
 check("E-KB-04", !I("a", "done", "Szia", now - 600, now, "a", []), "stale (10 min) result is not inserted into a new field")
 check("E-KB-04", !I("a", "processing", "Szia", now - 2, now, "a", []), "only done inserts")
 
+// E-REC-07 landed insert ids stay on device so History can tell a paste succeeded
+let landed = KeyboardLogic.rememberLanded
+check("E-REC-07", landed(nil, "a") == "[\"a\"]", "first insert is recorded")
+check("E-REC-07", landed("[\"a\"]", "a") == "[\"a\"]", "the same insert is not recorded twice")
+check("E-REC-07", landed("[\"a\"]", "b") == "[\"a\",\"b\"]", "a later insert is appended")
+
 // E-AUD-01 silence detection / VAD (same code as the app's native module)
 let sr = 16_000
 let silence = [Float](repeating: 0, count: sr * 2)

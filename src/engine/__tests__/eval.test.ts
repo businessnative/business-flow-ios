@@ -1,4 +1,4 @@
-// The 49 local eval cases from bn-flow-mac (Eval.swift), run through the TS engine.
+// The 49 local eval cases from business-flow-mac (Eval.swift), run through the TS engine.
 // swift-local-eval.json = output of `Business Flow --eval local` (desktop 0.3.0) — the TS port must match it exactly.
 import { describe, expect, it } from 'vitest';
 import { formatDictation } from '../formatter';

@@ -1,4 +1,4 @@
-// Shared engine types — mirrors bn-flow-mac Sources/BNFlowCore/Models.swift (mobile-relevant subset).
+// Shared engine types — mirrors business-flow-mac Sources/BNFlowCore/Models.swift (mobile-relevant subset).
 
 export type DictationLanguage = 'auto' | 'hu' | 'en';
 export const languageLabels: Record<DictationLanguage, string> = {
@@ -59,6 +59,10 @@ export const builtInPolishPresets: PolishPreset[] = [
 ];
 
 export type HistoryKind = 'dictation' | 'polish';
+/** success: text ready. failed: network/API/key. interrupted: cut off before a finished transcript. empty: no speech came back. missed: text exists but never appeared in the field. */
+export type HistoryStatus = 'success' | 'failed' | 'interrupted' | 'empty' | 'missed';
+/** app: shown in the app. pending: keyboard has not confirmed insertion. landed: the field accepted it. missed: the field never showed it. */
+export type HistoryDelivery = 'app' | 'pending' | 'landed' | 'missed';
 export interface HistoryItem {
   id: string;
   date: number; // ms epoch
@@ -67,8 +71,15 @@ export interface HistoryItem {
   category: AppCategory;
   durationSeconds: number;
   kind: HistoryKind;
-  /** Saved audio file (for retry after an error), if any. */
+  status?: HistoryStatus;
+  /** Short Hungarian explanation when the attempt did not fully succeed. */
+  reason?: string;
+  /** Saved audio file (on device, for retry). Absent after a successful transcription. */
   audioUri?: string;
+  /** Keyboard command id, so an insert acknowledgement can find this row. */
+  insertId?: string;
+  delivery?: HistoryDelivery;
+  /** Same text as `reason`. Kept so older rows and screens still read it. */
   error?: string;
 }
 
