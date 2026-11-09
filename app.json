@@ -1,0 +1,77 @@
+{
+  "expo": {
+    "name": "Business Flow",
+    "slug": "business-flow",
+    "version": "0.4.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "businessflow",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0a0b",
+    "primaryColor": "#c0c0e7",
+    "ios": {
+      "bundleIdentifier": "com.example.businessflow",
+      "buildNumber": "3",
+      "supportsTablet": false,
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.example.businessflow"
+        ],
+        "keychain-access-groups": [
+          "$(AppIdentifierPrefix)com.example.businessflow.shared"
+        ]
+      },
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSMicrophoneUsageDescription": "A Business Flow a mikrofont a diktáláshoz használja. A hangot csak az átíráshoz küldjük el a saját API-kulcsoddal.",
+        "CFBundleDevelopmentRegion": "hu",
+        "CFBundleLocalizations": [
+          "hu",
+          "en"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.example.businessflow",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0b",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "@bacons/apple-targets",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0"
+          }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#0a0a0b"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

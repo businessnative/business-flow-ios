@@ -1,0 +1,43 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.kotlin/
+*.orig.*
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.tsbuildinfo
+/ios
+/android
+
+# secrets / local data (never commit)
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.keychain
+*.keychain-db
+*signing-keychain.pass
+*.wav
+*.m4a
+*.caf
+*.mp3
+*.log
+
+# eval live outputs
+evals/results/*
+!evals/results/.gitkeep
+bf-e2e*.json
+vitest.json
+
+# generated screenshots (may contain personal history)
+report/
